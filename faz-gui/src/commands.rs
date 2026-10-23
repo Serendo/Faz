@@ -2651,8 +2651,8 @@ fn compute_default_actions() -> Vec<KeyAssignment> {
         ToggleCurrentTabPanesInputBroadcast,
         ToggleAllPanesInputBroadcast,
         // ----------------- Help
-        OpenUri("https://github.com/tw93/Faz".to_string()),
-        OpenUri("https://github.com/tw93/Faz/issues/".to_string()),
+        OpenUri("https://github.com/Serendo/Faz".to_string()),
+        OpenUri("https://github.com/Serendo/Faz/issues/".to_string()),
         ShowDebugOverlay,
         // ----------------- Misc
         OpenLinkAtMouseCursor,

@@ -39,7 +39,7 @@ mod utils;
 
 #[derive(Debug, Parser)]
 #[command(
-    about = "Faz Terminal Emulator\nhttp://github.com/tw93/Faz",
+    about = "Faz Terminal Emulator\nhttps://github.com/Serendo/Faz",
     version = wezterm_version()
 )]
 pub struct Opt {
@@ -358,11 +358,7 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
     }
 
     const MENU_ITEMS: [(&str, &str, MenuChoice); 4] = [
-        (
-            "config",
-            "Manage terminal and assistant settings",
-            MenuChoice::Config,
-        ),
+        ("config", "Manage terminal settings", MenuChoice::Config),
         ("init", "Initialize shell integration", MenuChoice::Init),
         (
             "doctor",
@@ -392,17 +388,40 @@ fn select_main_menu_command() -> anyhow::Result<Option<SubCommand>> {
 
         let mut out = String::new();
         out.push_str("\r\n");
-        out.push_str(&format!("{green}  _  __      _          {reset}\r\n"));
-        out.push_str(&format!("{green} | |/ /     | |         {reset}\r\n"));
-        out.push_str(&format!("{green} | ' / __ _ | | __ _   _ {reset}\r\n"));
-        out.push_str(&format!("{green} |  < / _` || |/ /| | | |{reset}\r\n"));
-        out.push_str(&format!(
-            "{green} | . \\ (_| ||   < | |_| |{reset}  {purple_bold}https://github.com/tw93/Faz{reset}\r\n"
-        ));
-        out.push_str(&format!(
-            "{green} |_|\\_\\__,_||_|\\_\\ \\__,_|{reset}  {green}A fast, out-of-the-box terminal built for AI coding.{reset}\r\n"
-        ));
-        out.push_str("\r\n");
+        // "Faz" drawn with braille patterns: each cell is a 2x4 dot grid, so
+        // five rows of text give twenty rows of pixels — enough to keep a
+        // lowercase `a` and `z` readable, which six columns per letter is not.
+        //
+        // The taglines sit to the right of the glyph, padded to the widest
+        // stroke so the block reads as one unit.
+        const LOGO_WIDTH: usize = 16;
+        let taglines: [(&str, &str); 4] = [
+            ("", ""),
+            ("https://github.com/Serendo/Faz", purple_bold),
+            ("A macOS terminal with tmux and ZMODEM built in.", green),
+            ("", ""),
+        ];
+        for (line, (text, color)) in [
+            "⣤⣤⣤⣤⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+            "⣿⡇⠀⠀⠀⢀⣠⣤⣤⣤⠀⣤⣤⣤⣤⠀",
+            "⣿⡟⠛⠛⠀⣼⠏⠀⢸⣿⠀⠀⣰⡿⠋⠀",
+            "⣿⡇⠀⠀⠀⢻⣧⣴⢿⣿⢠⣾⣯⣤⣤⡄",
+        ]
+        .iter()
+        .zip(taglines)
+        {
+            let cell_width = line.chars().count();
+            let pad = " ".repeat(LOGO_WIDTH.saturating_sub(cell_width));
+            if text.is_empty() {
+                out.push_str(&format!("{green}{line}{reset}\r\n"));
+            } else {
+                out.push_str(&format!(
+                    "{green}{line}{reset}{pad}  {color}{text}{reset}\r\n"
+                ));
+            }
+        }
+        // No blank line here: the menu sits directly under the glyph's
+        // baseline so the block reads as one piece.
         for (idx, (name, desc, _)) in MENU_ITEMS.iter().enumerate() {
             let is_selected = idx == selected;
             let number = idx + 1;
