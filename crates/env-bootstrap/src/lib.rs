@@ -206,7 +206,6 @@ fn register_lua_modules() {
     // Deferred modules loaded lazily on first access
     for func in [
         battery::register,
-        plugin::register,
         url_funcs::register,
         procinfo_funcs::register,
     ] {

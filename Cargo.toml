@@ -66,7 +66,6 @@ async-executor = "1.11"
 async-io = "2.3"
 async-task = "4.7"
 async-trait = "0.1"
-async_ossl = { path = "crates/async_ossl" }
 faz-unicode-names = { path = "crates/faz-unicode-names" }
 backtrace = "0.3"
 base64 = {version="0.22", default-features=false }
@@ -133,7 +132,6 @@ futures-lite = "2.3"
 futures-util = "0.3"
 gethostname = "0.5"
 getrandom = "0.3.1"
-git2 = { version = "0.21", default-features = false, features = ["https", "vendored-libgit2", "vendored-openssl"] }
 gl_generator = "0.14"
 glium = { version = "0.35", default-features = false }
 governor = {version="0.5", default-features=false, features=["std"]}
@@ -186,7 +184,6 @@ objc2 = "0.6"
 objc2-core-graphics = "0.3"
 objc2-foundation = "0.3"
 objc2-user-notifications = "0.3"
-openssl = { version = "0.10.57", features = ["vendored"] }
 ordered-float = {version="4.1", default-features=false}
 parking_lot = "0.12"
 passfd = "0.1.6"
@@ -197,7 +194,6 @@ phf = {version="0.11", default-features=false}
 phf_codegen = "0.10"
 pkg-config = "0.3"
 plist = "1.7"
-plugin = { path = "lua-api-crates/plugin" }
 portable-pty = { path = "crates/pty" }
 predicates = "3.0"
 proc-macro2 = "1.0"

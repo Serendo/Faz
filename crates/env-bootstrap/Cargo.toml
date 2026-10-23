@@ -21,7 +21,6 @@ libc.workspace = true
 log.workspace = true
 logging.workspace = true
 mux-lua.workspace = true
-plugin.workspace = true
 procinfo-funcs.workspace = true
 serde-funcs.workspace = true
 share-data.workspace = true
