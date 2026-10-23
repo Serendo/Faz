@@ -3685,11 +3685,18 @@ impl TermWindow {
 
         let border = self.get_os_border();
         let tab_bar_height = self.tab_bar_pixel_height().unwrap_or(0.);
+        // Must match where `paint_tab_bar` actually draws the bar. The bar
+        // hangs from the title bar strip line rather than sitting at the top
+        // of the window, so measuring from `border.top` put the hover region
+        // a strip's worth of pixels above the tabs: hovering a real tab could
+        // fall outside it and the hover state would not apply.
         let tab_bar_y = if self.config.tab_bar_at_bottom {
             ((self.dimensions.pixel_height as f32) - (tab_bar_height + border.bottom.get() as f32))
                 .max(0.)
+        } else if self.layout_is_effective_fullscreen() {
+            0.
         } else {
-            border.top.get() as f32
+            (self.title_bar_strip_height() - tab_bar_height).max(0.)
         };
 
         let tab_bar_height = self.tab_bar_pixel_height().unwrap_or(0.);
