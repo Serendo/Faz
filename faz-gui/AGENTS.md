@@ -50,6 +50,10 @@
 - Launcher entries that target a pane must retain its stable `PaneId`, not a tab or topological pane index. The launcher snapshot can outlive pane exits and split-tree reindexing; resolve the `PaneId` against the live mux only after the overlay closes.
 - A partially failed startup session restore must preserve the original session envelope and scrollback sidecars. Only mark a snapshot consumed after every saved window restores successfully; otherwise exit-time saving can overwrite the only complete copy.
 
+- ZMODEM pickers are per-pane, not per-tab. `start_overlay_pane` + `assign_overlay_for_pane` render the browser inside its own pane; a tab overlay (`assign_overlay`) cancels whatever that tab already shows, so a broadcast `rz` would leave all but one pane with an abandoned session. `zmodem_pending` is a `HashMap<PaneId, _>` for the same reason: a single slot keeps only the last detection.
+- The file browser measures width in display cells, never chars. CJK names are two cells per character; counting chars overflows the column, wraps the line, and shifts everything (cursor included) one row down. Use `unicode_column_width` for truncation, column padding, and caret placement.
+- Confirm an overlay-geometry change by what it does at the boundary, not by eyeballing the middle: tab bar hover used to be measured from `border.top` while the bar is painted at `strip - tab_bar_height`, so hovering a real tab could fall outside its region.
+
 ## Cross-References
 
 - [`mux/AGENTS.md`](../mux/AGENTS.md) - Tab and pane abstractions consumed by GUI.

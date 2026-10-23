@@ -383,7 +383,6 @@ fn summarize_bell_tokens(tokens: &[&str]) -> Option<String> {
 /// it has an answer.
 #[derive(Debug, Clone)]
 pub struct ZmodemPending {
-    pub pane_id: PaneId,
     pub direction: mux::zmodem::Direction,
 }
 
@@ -1160,10 +1159,14 @@ pub struct TermWindow {
     selection_copy_disabled_hint_shown: bool,
     last_window_title: String,
 
-    /// A ZMODEM session the remote started, waiting for the user to pick a
-    /// file or a destination. Set by `on_zmodem_detected`, consumed when the
-    /// transfer starts.
-    zmodem_pending: Option<ZmodemPending>,
+    /// ZMODEM sessions the remote started, waiting for the user to pick a file
+    /// or a destination, keyed by pane.
+    ///
+    /// A single slot used to hold only the most recent detection, so under a
+    /// broadcast (`rz` typed into every pane at once) each new session
+    /// overwrote the previous one and the earlier panes were left waiting with
+    /// nothing tracking them.
+    zmodem_pending: std::collections::HashMap<PaneId, ZmodemPending>,
 
     /// Where the ZMODEM picker was last left, per pane and direction.
     ///
@@ -1171,6 +1174,9 @@ pub struct TermWindow {
     /// of a fixed guess, which matters when a session sends several files from
     /// the same place. Keyed by pane so two panes do not overwrite each other.
     zmodem_last_pick: std::collections::HashMap<(PaneId, mux::zmodem::Direction), PathBuf>,
+    /// Paths typed into the picker's input row, most recent last. Shared by
+    /// every picker in this process so reopening it offers what was just used.
+    zmodem_pick_history: Vec<String>,
 }
 
 /// Set once WebGpu has failed to initialize in this process. Every later
@@ -1737,8 +1743,9 @@ impl TermWindow {
             deferred_layout_relayout_epoch: 0,
             layout_sticky_fullscreen_until: None,
             closed_tab_history: std::collections::VecDeque::new(),
-            zmodem_pending: None,
+            zmodem_pending: std::collections::HashMap::new(),
             zmodem_last_pick: std::collections::HashMap::new(),
+            zmodem_pick_history: Vec::new(),
             os_parameters: None,
             render_backend: None,
             window: None,
@@ -2445,13 +2452,7 @@ impl TermWindow {
                 }
             }
             TermWindowNotif::ZmodemFinished(pane_id) => {
-                if self
-                    .zmodem_pending
-                    .as_ref()
-                    .is_some_and(|p| p.pane_id == pane_id)
-                {
-                    self.zmodem_pending = None;
-                }
+                self.zmodem_pending.remove(&pane_id);
             }
             TermWindowNotif::CancelOverlayForPane(pane_id) => {
                 self.cancel_overlay_for_pane(pane_id);
@@ -6751,16 +6752,16 @@ impl TermWindow {
         log::info!("zmodem: session detected on pane {pane_id} ({direction:?})");
 
         // One session at a time per pane. A second detection while a picker is
-        // open would otherwise stack overlays and race for the same pty.
-        if let Some(pending) = self.zmodem_pending.as_ref() {
-            if pending.pane_id == pane_id {
-                log::warn!(
-                    "zmodem: ignoring a second detection on pane {pane_id} while \
-                     a {:?} session is already pending",
-                    pending.direction
-                );
-                return;
-            }
+        // open would otherwise stack overlays and race for the same pty. Other
+        // panes are unaffected: each keeps its own picker, which is what makes
+        // a broadcast `rz` work.
+        if let Some(pending) = self.zmodem_pending.get(&pane_id) {
+            log::warn!(
+                "zmodem: ignoring a second detection on pane {pane_id} while \
+                 a {:?} session is already pending",
+                pending.direction
+            );
+            return;
         }
 
         let (sz, rz) = mux::zmodem::lrzsz_available();
@@ -6788,7 +6789,8 @@ impl TermWindow {
         // so the picker has to be opened now or the transfer stalls with the
         // remote waiting. The result arrives on the overlay's own thread via
         // the promise below.
-        self.zmodem_pending = Some(ZmodemPending { pane_id, direction });
+        self.zmodem_pending
+            .insert(pane_id, ZmodemPending { direction });
         self.open_zmodem_picker(pane_id, direction);
     }
 
@@ -6799,15 +6801,15 @@ impl TermWindow {
     /// mode is derived from the direction rather than chosen by the user:
     /// receiving writes into a directory, sending reads a file.
     fn open_zmodem_picker(&mut self, pane_id: PaneId, direction: mux::zmodem::Direction) {
+        // The picker is drawn inside its own pane rather than over the whole
+        // tab. A broadcast `rz` opens one picker per pane, and tab-wide
+        // overlays would have replaced each other: each `assign_overlay`
+        // cancels whatever the tab already shows.
         let mux = Mux::get();
-        let Some(window) = mux.get_window(self.mux_window_id) else {
+        let Some(pane) = mux.get_pane(pane_id) else {
+            log::warn!("zmodem: pane {pane_id} is gone; cannot open picker");
             return;
         };
-        let Some(tab) = window.iter().find(|t| t.contains_pane(pane_id)).cloned() else {
-            log::warn!("zmodem: pane {pane_id} is not in this window; cannot open picker");
-            return;
-        };
-        drop(window);
 
         let (mode, title) = match direction {
             mux::zmodem::Direction::Download => (
@@ -6834,10 +6836,12 @@ impl TermWindow {
                     .unwrap_or_else(|| config::HOME_DIR.to_path_buf()),
             });
 
-        let (overlay, future) = crate::overlay::start_overlay(self, &tab, move |_tab_id, term| {
-            crate::overlay::filebrowser::browse(term, start_dir, mode, title)
-        });
-        self.assign_overlay(tab.tab_id(), overlay);
+        let history = self.zmodem_pick_history.clone();
+        let (overlay, future) =
+            crate::overlay::start_overlay_pane(self, &pane, move |_pane_id, term| {
+                crate::overlay::filebrowser::browse(term, start_dir, mode, title, history)
+            });
+        self.assign_overlay_for_pane(pane_id, overlay);
 
         let Some(window) = self.window.clone() else {
             log::warn!("zmodem: no window to attach the picker result to");
@@ -6857,9 +6861,19 @@ impl TermWindow {
                                 path.parent().map(|p| p.to_path_buf())
                             }
                         };
+                        let history_entry = path.display().to_string();
                         if let Some(dir) = remembered {
                             window.notify(TermWindowNotif::Apply(Box::new(move |tw| {
                                 tw.zmodem_last_pick.insert((pane_id, direction), dir);
+                                // Keep the typed-path history bounded and
+                                // free of duplicates, newest last.
+                                tw.zmodem_pick_history.retain(|h| h != &history_entry);
+                                tw.zmodem_pick_history.push(history_entry);
+                                const LIMIT: usize = 50;
+                                if tw.zmodem_pick_history.len() > LIMIT {
+                                    let drop = tw.zmodem_pick_history.len() - LIMIT;
+                                    tw.zmodem_pick_history.drain(0..drop);
+                                }
                             })));
                         }
                         // Every picked path has a live peer behind it: a
@@ -7172,6 +7186,42 @@ mod tests {
         let body = source.split("fn colors(").nth(1).unwrap();
         let body = body.split("let active =").next().unwrap();
         assert!(body.contains(".resolved_palette\n            .tab_bar\n            .clone()"));
+    }
+
+    /// A broadcast `rz` fires one detection per pane. The pending map must
+    /// stay per-pane, and each picker must be drawn inside its own pane —
+    /// tab-wide overlays replace each other, so all but one picker would
+    /// vanish and abandon their session.
+    #[test]
+    fn zmodem_pickers_are_per_pane() {
+        let source = include_str!("mod.rs").split("#[cfg(test)]").next().unwrap();
+
+        assert!(
+            source.contains("zmodem_pending: std::collections::HashMap<PaneId, ZmodemPending>"),
+            "pending state must be keyed by pane, not a single slot"
+        );
+        assert!(
+            !source.contains("zmodem_pending: Option<ZmodemPending>"),
+            "a single slot loses every detection but the last"
+        );
+
+        let picker = source
+            .split("fn open_zmodem_picker(")
+            .nth(1)
+            .expect("picker function");
+        let body = picker.split("\n    fn ").next().unwrap();
+        assert!(
+            body.contains("start_overlay_pane"),
+            "the picker must render inside its pane"
+        );
+        assert!(
+            body.contains("assign_overlay_for_pane"),
+            "the picker must be installed on its pane, not the tab"
+        );
+        assert!(
+            !body.contains("assign_overlay(tab.tab_id()"),
+            "a tab overlay would cancel the pickers of sibling panes"
+        );
     }
 
     #[test]

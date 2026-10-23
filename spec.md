@@ -95,6 +95,15 @@
 |---|---|---|---|
 | Z-101 | 检测远端 `rz`/`sz` 发起的传输会话 | 已实现 | `mux/src/zmodem/detect.rs` |
 | Z-102 | 文件选择器挑选发送文件 / 保存目录；空格或 Ctrl+S 确认目录 | 已实现 | `overlay/filebrowser.rs` |
+| Z-119 | 文件选择器显示隐藏文件（`.config` 等路径可直接浏览与补全） | 已实现 | `read_dir`，单测 `read_dir_includes_hidden_entries` |
+| Z-120 | `Ctrl-P` 进入路径输入行：Tab 补全、方向键编辑、`PageUp`/`PageDown` 翻候选、`Esc` 退出输入行 | 已实现 | `handle_input_event`、`complete_path`，单测覆盖 |
+| Z-121 | 补全支持 `~` 展开、相对路径、绝对路径；目录补全补尾斜杠；目录模式只补目录 | 已实现 | `complete_path`、`resolve_against`，单测覆盖 |
+| Z-122 | 按显示列宽排版（CJK 占 2 列）：截断、候选列宽、光标位置均按单元格计算，避免折行错位 | 已实现 | `truncate`、`pad_to_cells`，单测覆盖 |
+| Z-123 | 候选多行面板：按列排布、可翻页、显示范围与总数，占独立区域不覆盖列表 | 已实现 | `completion_columns`、`completion_page` |
+| Z-124 | 每个 pane 独立记录待处理的 ZMODEM 会话，广播模式下多 pane 同时 `rz` 互不覆盖 | 已实现 | `zmodem_pending` 按 pane 记录，单测 `zmodem_pickers_are_per_pane` |
+| Z-125 | 文件选择器在所属 pane 内绘制，不占满整个 tab；多个 pane 可同时各持一个选择器 | 已实现 | `start_overlay_pane` + `assign_overlay_for_pane` |
+| Z-126 | 路径输入历史：同一次运行内 `↑`/`↓` 回溯已确认路径，不持久化 | 已实现 | `zmodem_pick_history` |
+| Z-127 | 选择器记忆上次位置，按 pane 与方向分别记录 | 已实现 | `zmodem_last_pick` |
 | Z-103 | 取消选择时向远端发送中止，并立即允许再次发起 | 已实现 | `finish_cancelled`，单测覆盖 |
 | Z-104 | 传输期间 PTY 读取权独占，另一读者阻塞等待 | 已实现 | `ReadGate`，单测覆盖 |
 | Z-105 | 传输期间拒绝所有非传输写入（按键、粘贴、注入、图片粘贴、字符写入），Ctrl+C 例外 | 已实现 | `is_zmodem_exclusive`，6 条路径全覆盖 |
