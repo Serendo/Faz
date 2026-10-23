@@ -81,27 +81,10 @@ pub fn register(lua: &Lua) -> anyhow::Result<()> {
     window_mod.set(
         "enumerate_gpus",
         lua.create_function(|_, _: ()| {
-            #[cfg(not(feature = "webgpu"))]
-            return Ok(Vec::<GpuInfo>::new());
-
-            #[cfg(feature = "webgpu")]
-            #[allow(unreachable_code)]
-            {
-                let backends = wgpu::Backends::all();
-                let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-                    backends,
-                    ..Default::default()
-                });
-                let gpus: Vec<GpuInfo> = instance
-                    .enumerate_adapters(backends)
-                    .into_iter()
-                    .map(|adapter| {
-                        let info = adapter.get_info();
-                        crate::termwindow::webgpu::adapter_info_to_gpu_info(info)
-                    })
-                    .collect();
-                Ok(gpus)
-            }
+            // Enumerating adapters needed the WebGpu backend, which is no
+            // longer built. The API stays so existing configs keep working;
+            // it reports no GPUs.
+            Ok(Vec::<GpuInfo>::new())
         })?,
     )?;
 

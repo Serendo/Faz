@@ -1,8 +1,6 @@
 use super::glyphcache::GlyphCache;
 use super::quad::*;
 use super::utilsprites::{RenderMetrics, UtilSprites};
-#[cfg(feature = "webgpu")]
-use crate::termwindow::webgpu::{adapter_info_to_gpu_info, WebGpuState, WebGpuTexture};
 use ::window::bitmaps::atlas::OutOfTextureSpace;
 use ::window::bitmaps::Texture2d;
 use ::window::glium::backend::Context as GliumContext;
@@ -15,22 +13,16 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::convert::TryInto;
 use std::rc::Rc;
 use wezterm_font::FontConfiguration;
-#[cfg(feature = "webgpu")]
-use wgpu::util::DeviceExt;
 
 const INDICES_PER_CELL: usize = 6;
 
 #[derive(Clone)]
 pub enum RenderContext {
     Glium(Rc<GliumContext>),
-    #[cfg(feature = "webgpu")]
-    WebGpu(Rc<WebGpuState>),
 }
 
 pub enum RenderFrame<'a> {
     Glium(&'a mut glium::Frame),
-    #[cfg(feature = "webgpu")]
-    WebGpu,
 }
 
 impl RenderContext {
@@ -41,8 +33,6 @@ impl RenderContext {
                 glium::index::PrimitiveType::TrianglesList,
                 indices,
             )?)),
-            #[cfg(feature = "webgpu")]
-            Self::WebGpu(state) => Ok(IndexBuffer::WebGpu(WebGpuIndexBuffer::new(indices, state))),
         }
     }
 
@@ -51,14 +41,12 @@ impl RenderContext {
             Self::Glium(_) => {
                 vec![Vertex::default(); num_quads * VERTICES_PER_CELL]
             }
-            #[cfg(feature = "webgpu")]
-            Self::WebGpu(_) => vec![],
         }
     }
 
     pub fn allocate_vertex_buffer(
         &self,
-        #[cfg_attr(not(feature = "webgpu"), allow(unused_variables))] num_quads: usize,
+        _num_quads: usize,
         initializer: &[Vertex],
     ) -> anyhow::Result<VertexBuffer> {
         match self {
@@ -66,11 +54,6 @@ impl RenderContext {
                 context,
                 initializer,
             )?)),
-            #[cfg(feature = "webgpu")]
-            Self::WebGpu(state) => Ok(VertexBuffer::WebGpu(WebGpuVertexBuffer::new(
-                num_quads * VERTICES_PER_CELL,
-                state,
-            ))),
         }
     }
 
@@ -104,12 +87,6 @@ impl RenderContext {
                 )?);
                 Ok(surface)
             }
-            #[cfg(feature = "webgpu")]
-            Self::WebGpu(state) => {
-                let texture: Rc<dyn Texture2d> =
-                    Rc::new(WebGpuTexture::new(size as u32, size as u32, state)?);
-                Ok(texture)
-            }
         }
     }
 
@@ -120,64 +97,30 @@ impl RenderContext {
                 ctx.get_opengl_renderer_string(),
                 ctx.get_opengl_version_string()
             ),
-            #[cfg(feature = "webgpu")]
-            Self::WebGpu(state) => {
-                let info = adapter_info_to_gpu_info(state.adapter_info.clone());
-                format!("WebGPU: {}", info.to_string())
-            }
         }
     }
 }
 
 pub enum IndexBuffer {
     Glium(GliumIndexBuffer<u32>),
-    #[cfg(feature = "webgpu")]
-    WebGpu(WebGpuIndexBuffer),
 }
 
 impl IndexBuffer {
     pub fn glium(&self) -> &GliumIndexBuffer<u32> {
         match self {
             Self::Glium(g) => g,
-            #[cfg(feature = "webgpu")]
-            _ => unreachable!(),
-        }
-    }
-    #[cfg(feature = "webgpu")]
-    pub fn webgpu(&self) -> &WebGpuIndexBuffer {
-        match self {
-            Self::WebGpu(g) => g,
-            _ => unreachable!(),
         }
     }
 }
 
 pub enum VertexBuffer {
     Glium(GliumVertexBuffer<Vertex>),
-    #[cfg(feature = "webgpu")]
-    WebGpu(WebGpuVertexBuffer),
 }
 
 impl VertexBuffer {
     pub fn glium(&self) -> &GliumVertexBuffer<Vertex> {
         match self {
             Self::Glium(g) => g,
-            #[cfg(feature = "webgpu")]
-            _ => unreachable!(),
-        }
-    }
-    #[cfg(feature = "webgpu")]
-    pub fn webgpu(&self) -> &WebGpuVertexBuffer {
-        match self {
-            Self::WebGpu(g) => g,
-            _ => unreachable!(),
-        }
-    }
-    #[cfg(feature = "webgpu")]
-    pub fn webgpu_mut(&mut self) -> &mut WebGpuVertexBuffer {
-        match self {
-            Self::WebGpu(g) => g,
-            _ => unreachable!(),
         }
     }
 }
@@ -204,10 +147,6 @@ impl StagingLayer {
                         let mapping = buf_slice.map();
                         vertices[..copy_len].copy_from_slice(&mapping[..copy_len]);
                     }
-                }
-                #[cfg(feature = "webgpu")]
-                VertexBuffer::WebGpu(buffer) => {
-                    buffer.read_vertices(&mut vertices[..copy_len]);
                 }
             }
         }
@@ -267,102 +206,6 @@ impl QuadAllocator for StagingLayer {
     }
 }
 
-#[cfg(feature = "webgpu")]
-pub struct WebGpuVertexBuffer {
-    buf: wgpu::Buffer,
-    num_vertices: usize,
-    state: Rc<WebGpuState>,
-}
-
-#[cfg(feature = "webgpu")]
-impl std::ops::Deref for WebGpuVertexBuffer {
-    type Target = wgpu::Buffer;
-    fn deref(&self) -> &Self::Target {
-        &self.buf
-    }
-}
-
-#[cfg(feature = "webgpu")]
-impl WebGpuVertexBuffer {
-    pub fn new(num_vertices: usize, state: &Rc<WebGpuState>) -> Self {
-        Self {
-            buf: state.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Vertex Buffer"),
-                size: (num_vertices * std::mem::size_of::<Vertex>()) as wgpu::BufferAddress,
-                usage: wgpu::BufferUsages::VERTEX,
-                mapped_at_creation: true,
-            }),
-            num_vertices,
-            state: Rc::clone(state),
-        }
-    }
-
-    pub fn write_vertices(&mut self, vertices: &[Vertex]) {
-        if vertices.is_empty() {
-            return;
-        }
-
-        let mut mapping = self.buf.slice(..).get_mapped_range_mut();
-        let mapped: &mut [Vertex] = bytemuck::cast_slice_mut(&mut mapping);
-        let copy_len = vertices.len().min(mapped.len());
-        if copy_len > 0 {
-            mapped[..copy_len].copy_from_slice(&vertices[..copy_len]);
-        }
-    }
-
-    pub fn read_vertices(&self, out: &mut [Vertex]) {
-        if out.is_empty() {
-            return;
-        }
-
-        let mapping = self.buf.slice(..).get_mapped_range();
-        let mapped: &[Vertex] = bytemuck::cast_slice(&mapping);
-        let copy_len = out.len().min(mapped.len());
-        if copy_len > 0 {
-            out[..copy_len].copy_from_slice(&mapped[..copy_len]);
-        }
-    }
-
-    pub fn recreate(&mut self) -> wgpu::Buffer {
-        let mut new_buf = self.state.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Vertex Buffer"),
-            size: (self.num_vertices * std::mem::size_of::<Vertex>()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::VERTEX,
-            mapped_at_creation: true,
-        });
-        std::mem::swap(&mut new_buf, &mut self.buf);
-        new_buf
-    }
-}
-
-#[cfg(feature = "webgpu")]
-pub struct WebGpuIndexBuffer {
-    buf: wgpu::Buffer,
-}
-
-#[cfg(feature = "webgpu")]
-impl std::ops::Deref for WebGpuIndexBuffer {
-    type Target = wgpu::Buffer;
-    fn deref(&self) -> &Self::Target {
-        &self.buf
-    }
-}
-
-#[cfg(feature = "webgpu")]
-impl WebGpuIndexBuffer {
-    pub fn new(indices: &[u32], state: &WebGpuState) -> Self {
-        Self {
-            buf: state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    usage: wgpu::BufferUsages::INDEX,
-                    contents: bytemuck::cast_slice(indices),
-                }),
-        }
-    }
-}
-
 pub struct TripleVertexBuffer {
     pub index: RefCell<usize>,
     pub bufs: RefCell<[VertexBuffer; 3]>,
@@ -415,10 +258,6 @@ impl TripleVertexBuffer {
                     let mut mapping = buf_slice.map();
                     mapping.copy_from_slice(&layer.vertices[..copy_len]);
                 }
-            }
-            #[cfg(feature = "webgpu")]
-            VertexBuffer::WebGpu(buffer) => {
-                buffer.write_vertices(&layer.vertices[..copy_len]);
             }
         }
     }
@@ -601,8 +440,6 @@ impl RenderState {
                             crate::startup_trace::mark("      compile_prog (shader) done");
                             Some(prog)
                         }
-                        #[cfg(feature = "webgpu")]
-                        RenderContext::WebGpu(_) => None,
                     };
 
                     let main_layer = Rc::new(RenderLayer::new(&context, 1024, 0)?);

@@ -30,7 +30,6 @@ vendored-fonts = [
   "vendor-roboto-font",
   "vendor-noto-emoji-font"
 ]
-webgpu = ["dep:wgpu"]    # disabled: the OpenGL path is the only shipped backend
 dhat-heap = ["dhat"]    # if you are doing heap profiling
 dhat-ad-hoc = ["dhat"]  # if you are doing ad hoc profiling
 
@@ -111,7 +110,6 @@ wezterm-open-url.workspace = true
 wezterm-term = { workspace = true, features = ["use_serde"] }
 bincode.workspace = true
 wezterm-toast-notification.workspace = true
-wgpu = { workspace = true, optional = true }
 window-funcs.workspace = true
 window.workspace = true
 

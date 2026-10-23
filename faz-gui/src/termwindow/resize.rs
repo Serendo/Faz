@@ -285,11 +285,6 @@ impl super::TermWindow {
         let maximize_transition = last_state.contains(WindowState::MAXIMIZED)
             != self.window_state.contains(WindowState::MAXIMIZED);
 
-        #[cfg(feature = "webgpu")]
-        if let Some(webgpu) = self.webgpu() {
-            webgpu.resize(dimensions);
-        }
-
         if should_defer_screen_change_scale_update(
             live_resizing,
             screen_changed,
