@@ -27,6 +27,7 @@ use crate::termwindow::render::{
     CachedLineState, LineQuadCacheKey, LineQuadCacheValue, LineToEleShapeCacheKey,
     LineToElementShapeItem,
 };
+#[cfg(feature = "webgpu")]
 use crate::termwindow::webgpu::WebGpuState;
 use ::wezterm_term::input::{ClickPosition, MouseButton as TMB};
 use ::window::*;
@@ -90,6 +91,7 @@ pub mod resize;
 mod selection;
 pub mod spawn;
 pub mod tab_rename;
+#[cfg(feature = "webgpu")]
 pub mod webgpu;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -186,10 +188,12 @@ const TOP_TAB_LAYOUT_FULLSCREEN_STICKY_MS: u64 = 160;
 /// Consecutive surface acquire timeouts before forcing a swapchain
 /// reconfigure; the Metal backend reports a sleep/wake-invalidated layer
 /// as Timeout (nil nextDrawable), see #458.
+#[cfg(feature = "webgpu")]
 const CONSECUTIVE_TIMEOUTS_BEFORE_RECONFIGURE: u32 = 3;
 /// Stop self-scheduling recovery repaints after this many consecutive
 /// surface acquire failures; user input and PTY output still trigger
 /// paint attempts beyond it.
+#[cfg(feature = "webgpu")]
 const WEBGPU_SURFACE_RECOVERY_SELF_INVALIDATE_LIMIT: u32 = 120;
 
 #[derive(Clone, Debug)]
@@ -999,6 +1003,7 @@ pub(crate) enum LineEditorSelectionState {
 /// invariant is enforced by the type system.
 pub enum RenderBackend {
     OpenGl(Rc<glium::backend::Context>),
+    #[cfg(feature = "webgpu")]
     WebGpu(Rc<WebGpuState>),
 }
 
@@ -1182,6 +1187,7 @@ pub struct TermWindow {
 /// Set once WebGpu has failed to initialize in this process. Every later
 /// window then goes straight to OpenGL instead of paying the failed attempt
 /// again (#524).
+#[cfg(feature = "webgpu")]
 static WEBGPU_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
 
 impl TermWindow {
@@ -1194,6 +1200,7 @@ impl TermWindow {
     }
 
     /// Accessor for the WebGpu backend, if active.
+    #[cfg(feature = "webgpu")]
     pub(crate) fn webgpu(&self) -> Option<&Rc<WebGpuState>> {
         match &self.render_backend {
             Some(RenderBackend::WebGpu(w)) => Some(w),
@@ -1943,8 +1950,18 @@ impl TermWindow {
         crate::startup_trace::mark("  window.show() done");
 
         crate::startup_trace::mark("  GPU init start");
+        #[cfg(feature = "webgpu")]
         let want_webgpu = matches!(config.front_end, FrontEndSelection::WebGpu)
             && !WEBGPU_UNAVAILABLE.load(Ordering::Relaxed);
+        #[cfg(not(feature = "webgpu"))]
+        {
+            // Only used by the WebGpu arm below.
+            let _ = FrontEndSelection::WebGpu;
+        }
+
+        // Without the `webgpu` feature the type does not exist; the tuple's
+        // second element stays `None` and only the OpenGL arm runs.
+        #[cfg(feature = "webgpu")]
         let (gl, webgpu) = if want_webgpu {
             match WebGpuState::new(&window, dimensions, &config).await {
                 Ok(state) => (None, Some(Rc::new(state))),
@@ -1970,6 +1987,11 @@ impl TermWindow {
         } else {
             (Some(window.enable_opengl().await?), None)
         };
+        #[cfg(not(feature = "webgpu"))]
+        let (gl, webgpu) = (
+            Some(window.enable_opengl().await?),
+            None::<std::convert::Infallible>,
+        );
         crate::startup_trace::mark("  GPU init done");
 
         {
@@ -1998,8 +2020,13 @@ impl TermWindow {
                 myself.render_backend = Some(RenderBackend::OpenGl(Rc::clone(&gl)));
                 myself.created(RenderContext::Glium(gl))?;
             } else if let Some(webgpu) = webgpu {
-                myself.render_backend = Some(RenderBackend::WebGpu(Rc::clone(&webgpu)));
-                myself.created(RenderContext::WebGpu(webgpu))?;
+                #[cfg(feature = "webgpu")]
+                {
+                    myself.render_backend = Some(RenderBackend::WebGpu(Rc::clone(&webgpu)));
+                    myself.created(RenderContext::WebGpu(webgpu))?;
+                }
+                #[cfg(not(feature = "webgpu"))]
+                let _ = webgpu;
             }
             crate::startup_trace::mark("  TermWindow::created done");
             myself.subscribe_to_pane_updates();
@@ -2144,11 +2171,14 @@ impl TermWindow {
                 self.resizes_pending -= 1;
                 if self.is_repaint_pending {
                     self.is_repaint_pending = false;
+                    #[cfg(feature = "webgpu")]
                     if self.webgpu().is_some() {
                         self.do_paint_webgpu()?;
                     } else {
                         self.do_paint(window);
                     }
+                    #[cfg(not(feature = "webgpu"))]
+                    self.do_paint(window);
                 }
                 self.apply_pending_scale_changes();
                 Ok(true)
@@ -2184,9 +2214,11 @@ impl TermWindow {
                 if self.resizes_pending > 0 {
                     self.is_repaint_pending = true;
                     Ok(true)
-                } else if self.webgpu().is_some() {
-                    self.do_paint_webgpu()
                 } else {
+                    #[cfg(feature = "webgpu")]
+                    if self.webgpu().is_some() {
+                        return self.do_paint_webgpu();
+                    }
                     Ok(self.do_paint(window))
                 }
             }
@@ -2270,6 +2302,7 @@ impl TermWindow {
         window.finish_frame(frame).is_ok()
     }
 
+    #[cfg(feature = "webgpu")]
     fn do_paint_webgpu(&mut self) -> anyhow::Result<bool> {
         // WebGpuState::resize takes &self; the enum accessor returns a
         // borrow we can call straight through.
@@ -2345,6 +2378,7 @@ impl TermWindow {
     /// window recovers without user input. Capped so a surface that never
     /// recovers does not busy-render at max_fps forever; key presses and PTY
     /// output still trigger paint attempts past the cap.
+    #[cfg(feature = "webgpu")]
     fn schedule_webgpu_surface_recovery(&mut self) {
         let failures = self
             .webgpu()
@@ -2358,6 +2392,7 @@ impl TermWindow {
         }
     }
 
+    #[cfg(feature = "webgpu")]
     fn do_paint_webgpu_impl(&mut self) -> anyhow::Result<bool> {
         self.paint_impl(&mut RenderFrame::WebGpu)?;
         Ok(true)

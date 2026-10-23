@@ -1,4 +1,5 @@
 use crate::colorease::ColorEaseUniform;
+#[cfg(feature = "webgpu")]
 use crate::termwindow::webgpu::ShaderUniform;
 use crate::termwindow::RenderFrame;
 use crate::uniforms::UniformBuilder;
@@ -13,10 +14,12 @@ impl crate::TermWindow {
     pub fn call_draw(&mut self, frame: &mut RenderFrame) -> anyhow::Result<()> {
         match frame {
             RenderFrame::Glium(ref mut frame) => self.call_draw_glium(frame),
+            #[cfg(feature = "webgpu")]
             RenderFrame::WebGpu => self.call_draw_webgpu(),
         }
     }
 
+    #[cfg(feature = "webgpu")]
     fn call_draw_webgpu(&mut self) -> anyhow::Result<()> {
         use crate::termwindow::webgpu::WebGpuTexture;
 

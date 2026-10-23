@@ -45,6 +45,7 @@ pub struct Vertex {
     Vertex, position, tex, fg_color, alt_color, hsv, has_color, mix_value
 );
 
+#[cfg(feature = "webgpu")]
 impl Vertex {
     const ATTRIBS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
     0 => Float32x2,
