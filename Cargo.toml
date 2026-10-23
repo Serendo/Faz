@@ -70,7 +70,6 @@ faz-unicode-names = { path = "crates/faz-unicode-names" }
 backtrace = "0.3"
 base64 = {version="0.22", default-features=false }
 base91 = { path = "crates/base91" }
-battery = { path = "lua-api-crates/battery" }
 benchmarking = "0.4"
 bincode = "1"
 bintree = { path = "crates/bintree" }
@@ -232,7 +231,6 @@ socket2 = "0.5"
 spa = "0.3.1"
 spawn-funcs = { path = "lua-api-crates/spawn-funcs" }
 sqlite-cache = "0.1.4"
-starship-battery = "0.10"
 strsim = "0.11"
 syn = "1.0"
 tabout = { path = "crates/tabout" }

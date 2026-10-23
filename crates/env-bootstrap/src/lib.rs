@@ -204,13 +204,24 @@ fn register_lua_modules() {
     }
 
     // Deferred modules loaded lazily on first access
-    for func in [
-        battery::register,
-        url_funcs::register,
-        procinfo_funcs::register,
-    ] {
+    for func in [register_battery_info, url_funcs::register, procinfo_funcs::register] {
         config::lua::add_deferred_setup_func(func);
     }
+}
+
+/// `wezterm.battery_info()` kept for config compatibility.
+///
+/// It used to enumerate hardware batteries through `starship-battery`,
+/// which dragged in a dimensional-analysis crate and platform backends
+/// for a Lua helper Faz itself never called. The API stays so existing
+/// configs do not error; it simply reports no batteries.
+fn register_battery_info(lua: &config::lua::mlua::Lua) -> anyhow::Result<()> {
+    let wezterm_mod = config::lua::get_or_create_module(lua, "wezterm")?;
+    wezterm_mod.set(
+        "battery_info",
+        lua.create_function(|lua, _: ()| lua.create_table())?,
+    )?;
+    Ok(())
 }
 
 pub fn bootstrap() {
