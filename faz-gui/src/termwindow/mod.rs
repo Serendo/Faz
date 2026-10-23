@@ -1453,7 +1453,6 @@ impl TermWindow {
                 self.load_os_parameters();
                 self.schedule_deferred_layout_relayout(window);
             }
-        } else {
         }
 
         // Only repaint when becoming visible; an occluded window doesn't need a

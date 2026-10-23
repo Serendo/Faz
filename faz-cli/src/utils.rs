@@ -152,7 +152,6 @@ fn run_editor_command(program: &str, args: &[String], path: &Path) -> std::io::R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use tempfile::tempdir;
 
     #[test]

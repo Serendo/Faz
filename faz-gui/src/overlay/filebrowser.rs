@@ -1303,16 +1303,14 @@ mod tests {
     #[test]
     fn escape_and_q_cancel() {
         let dir = fixture();
-        for key in ['q'] {
-            let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
-            assert_eq!(
-                state.handle_event(InputEvent::Key(KeyEvent {
-                    key: KeyCode::Char(key),
-                    modifiers: Modifiers::NONE,
-                })),
-                EventAction::Done(PickResult::Cancelled)
-            );
-        }
+        let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
+        assert_eq!(
+            state.handle_event(InputEvent::Key(KeyEvent {
+                key: KeyCode::Char('q'),
+                modifiers: Modifiers::NONE,
+            })),
+            EventAction::Done(PickResult::Cancelled)
+        );
         let mut state = BrowserState::new(dir.path().to_path_buf(), PickMode::File, "t".into());
         assert_eq!(
             state.handle_event(arrow(KeyCode::Escape)),
@@ -1345,16 +1343,6 @@ mod tests {
         assert_eq!(state.outcome, None);
     }
     // ---- path input row ----
-
-    fn type_str(state: &mut BrowserState, text: &str) {
-        for c in text.chars() {
-            state.handle_input_event(InputEvent::Key(KeyEvent {
-                key: KeyCode::Char(c),
-                modifiers: Modifiers::NONE,
-            }));
-        }
-    }
-
     #[test]
     fn ctrl_p_enters_input_mode_seeded_with_current_dir() {
         let dir = fixture();

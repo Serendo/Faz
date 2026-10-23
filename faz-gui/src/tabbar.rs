@@ -814,15 +814,15 @@ fn tab_width_budget(
     tab_max_width: usize,
 ) -> usize {
     let tab_max_width = tab_max_width.max(1);
-    if number_of_tabs == 0 {
-        tab_max_width
-    } else {
-        let available_cells = title_width.saturating_sub(controls_width);
-        // Floor at 1 so a tab is never squeezed to zero width (it would vanish
-        // and become unclickable); cap at the configured per-tab maximum.
-        let per_tab = (available_cells / number_of_tabs).max(1);
-        per_tab.min(tab_max_width)
-    }
+    let Some(per_tab) = title_width
+        .saturating_sub(controls_width)
+        .checked_div(number_of_tabs)
+    else {
+        return tab_max_width;
+    };
+    // Floor at 1 so a tab is never squeezed to zero width (it would vanish
+    // and become unclickable); cap at the configured per-tab maximum.
+    per_tab.max(1).min(tab_max_width)
 }
 
 impl TabBarState {
