@@ -494,8 +494,11 @@ pub struct Config {
     /// active tab.  Clicking on a tab activates it.
     #[dynamic(default = "default_true")]
     pub enable_tab_bar: bool,
-    #[dynamic(default)]
-    pub tab_bar_at_bottom: bool,
+    /// Removed: the tab bar is always at the top of the window.
+    /// Kept as a tolerated deprecated field so existing `faz.lua` files that
+    /// set it still load instead of failing.
+    #[dynamic(default, deprecated = "the tab bar is always at the top")]
+    pub tab_bar_at_bottom: wezterm_dynamic::Value,
 
     /// If true, auto-generated tab titles use only the current folder name
     /// instead of the default parent/current path pair.

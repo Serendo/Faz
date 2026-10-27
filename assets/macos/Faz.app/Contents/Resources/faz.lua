@@ -2173,7 +2173,6 @@ config.smart_tab_mode = 'suggestion_first'
 
 -- ===== Tab Bar =====
 config.enable_tab_bar = true
-config.tab_bar_at_bottom = true
 config.tab_max_width = 48
 config.tab_title_show_foreground_process = false
 config.hide_tab_bar_if_only_one_tab = true

@@ -1348,7 +1348,7 @@ impl TermWindow {
             // last_session.json resurrects tabs the user already closed.
             crate::session_restore::forget_logically_closed(self.mux_window_id);
         }
-        if !self.config.tab_bar_at_bottom && self.layout_is_effective_fullscreen() {
+        if self.layout_is_effective_fullscreen() {
             self.arm_layout_sticky_fullscreen();
         }
         self.focused = if focused { Some(Instant::now()) } else { None };
@@ -1374,23 +1374,12 @@ impl TermWindow {
         // Reset the cursor blink phase
         self.prev_cursor.bump();
 
-        let immediate_relayout_needed = self.config.tab_bar_at_bottom; // Only immediate for bottom-tab
-
-        if focused && immediate_relayout_needed {
-            // Some macOS Space switches do not reliably emit a visibility-change
-            // callback. Re-apply layout on focus gain for bottom-tab layouts,
-            // where stale tab-bar visibility is most noticeable.
-            self.sync_tab_bar_visibility_for_window_state("focus_changed:sync_tab_bar");
-            let dimensions = self.dimensions;
-            self.apply_dimensions(&dimensions, None, window, true);
-            self.schedule_deferred_layout_relayout(window);
-        } else if focused && !self.config.tab_bar_at_bottom {
-            // Top-tab (both fullscreen and non-fullscreen): ONLY run a deferred
-            // relayout. Lua config overrides (window_padding) take time to arrive
-            // after we gain focus. If we `apply_dimensions` immediately, we will
-            // draw 1 frame with the old padding, causing a visible flicker.
-            // Deferring gives Lua's `window-focus-changed` handler time to push
-            // the new override.
+        if focused {
+            // ONLY run a deferred relayout. Lua config overrides
+            // (window_padding) take time to arrive after we gain focus. If we
+            // `apply_dimensions` immediately, we will draw 1 frame with the old
+            // padding, causing a visible flicker. Deferring gives Lua's
+            // `window-focus-changed` handler time to push the new override.
             self.schedule_deferred_layout_relayout(window);
         }
 
@@ -1416,27 +1405,16 @@ impl TermWindow {
 
     fn visibility_changed(&mut self, visible: bool, window: &Window) {
         log::trace!("Setting visibility to {:?}", visible);
-        if !self.config.tab_bar_at_bottom && self.layout_is_effective_fullscreen() {
+        if self.layout_is_effective_fullscreen() {
             self.arm_layout_sticky_fullscreen();
         }
         self.quad_generation += 1;
 
         if visible {
-            let immediate_relayout_needed = self.config.tab_bar_at_bottom;
-
-            if immediate_relayout_needed {
-                self.load_os_parameters();
-                self.sync_tab_bar_visibility_for_window_state("visibility_changed:sync_tab_bar");
-                let dimensions = self.dimensions;
-                self.apply_dimensions(&dimensions, None, window, true);
-                self.schedule_deferred_layout_relayout(window);
-            } else if !self.config.tab_bar_at_bottom {
-                // Top-tab: ONLY run deferred relayout.
-                // Prevent 1-frame flicker while waiting for Lua padding overrides
-                // just like in `focus_changed`.
-                self.load_os_parameters();
-                self.schedule_deferred_layout_relayout(window);
-            }
+            // ONLY run deferred relayout. Prevent 1-frame flicker while
+            // waiting for Lua padding overrides, just like in `focus_changed`.
+            self.load_os_parameters();
+            self.schedule_deferred_layout_relayout(window);
         }
 
         // Only repaint when becoming visible; an occluded window doesn't need a
@@ -1476,20 +1454,14 @@ impl TermWindow {
 
 impl TermWindow {
     fn arm_layout_sticky_fullscreen(&mut self) {
-        if self.config.tab_bar_at_bottom {
-            return;
-        }
-
         self.layout_sticky_fullscreen_until =
             Some(Instant::now() + Duration::from_millis(TOP_TAB_LAYOUT_FULLSCREEN_STICKY_MS));
     }
 
     fn layout_sticky_fullscreen_active(&self) -> bool {
-        !self.config.tab_bar_at_bottom
-            && self
-                .layout_sticky_fullscreen_until
-                .map(|until| Instant::now() < until)
-                .unwrap_or(false)
+        self.layout_sticky_fullscreen_until
+            .map(|until| Instant::now() < until)
+            .unwrap_or(false)
     }
 
     pub(crate) fn effective_layout_window_state(&self) -> WindowState {
@@ -1519,12 +1491,11 @@ impl TermWindow {
         // Give top-tab fullscreen extra time to let Lua's update-right-status
         // config override settle before we recompute dimensions.  For all
         // other cases the original 16 ms frame-skip is sufficient.
-        let delay_ms: u64 =
-            if !self.config.tab_bar_at_bottom && self.layout_is_effective_fullscreen() {
-                80
-            } else {
-                16
-            };
+        let delay_ms: u64 = if self.layout_is_effective_fullscreen() {
+            80
+        } else {
+            16
+        };
         self.deferred_layout_relayout_epoch = self.deferred_layout_relayout_epoch.wrapping_add(1);
         let epoch = self.deferred_layout_relayout_epoch;
 
@@ -1658,7 +1629,6 @@ impl TermWindow {
             &config,
             v_context,
             show_tab_bar,
-            config.tab_bar_at_bottom,
             tab_bar_height,
             false,
         );
@@ -1678,7 +1648,7 @@ impl TermWindow {
         let integrated_top_inset = crate::termwindow::render::borders::integrated_buttons_top_inset(
             &config,
             false,
-            show_tab_bar && !config.tab_bar_at_bottom,
+            show_tab_bar,
             dpi as f32,
         );
         if integrated_top_inset > 0 {
@@ -3023,7 +2993,6 @@ impl TermWindow {
                 pixel_cell: self.render_metrics.cell_size.height as f32,
             },
             self.show_tab_bar,
-            self.config.tab_bar_at_bottom,
             tab_bar_height,
             self.layout_uses_edge_to_edge_padding(),
         )
@@ -3218,7 +3187,7 @@ impl TermWindow {
             window.invalidate();
 
             // Schedule a deferred layout to ensure macOS window frames and native titlebars
-            // correctly reposition themselves when configs that shift content (like tab_bar_at_bottom)
+            // correctly reposition themselves when configs that shift content
             // or window_padding are toggled.
             self.schedule_deferred_layout_relayout(&window);
         }
@@ -3304,11 +3273,7 @@ impl TermWindow {
         } else {
             0.
         };
-        let (top_bar_height, bottom_bar_height) = if self.config.tab_bar_at_bottom {
-            (0.0, tab_bar_height)
-        } else {
-            (tab_bar_height, 0.0)
-        };
+        let (top_bar_height, bottom_bar_height) = (tab_bar_height, 0.0);
         let border = self.get_os_border();
 
         Some(scrollbar_track(
@@ -3535,17 +3500,13 @@ impl TermWindow {
         let active_tab = tabs.iter().find(|t| t.is_active).cloned();
         let active_pane = panes.iter().find(|p| p.is_active).cloned();
 
-        let border = self.get_os_border();
         let tab_bar_height = self.tab_bar_pixel_height().unwrap_or(0.);
         // Must match where `paint_tab_bar` actually draws the bar. The bar
         // hangs from the title bar strip line rather than sitting at the top
         // of the window, so measuring from `border.top` put the hover region
         // a strip's worth of pixels above the tabs: hovering a real tab could
         // fall outside it and the hover state would not apply.
-        let tab_bar_y = if self.config.tab_bar_at_bottom {
-            ((self.dimensions.pixel_height as f32) - (tab_bar_height + border.bottom.get() as f32))
-                .max(0.)
-        } else if self.layout_is_effective_fullscreen() {
+        let tab_bar_y = if self.layout_is_effective_fullscreen() {
             0.
         } else {
             (self.title_bar_strip_height() - tab_bar_height).max(0.)
@@ -3691,7 +3652,7 @@ impl TermWindow {
         if let Some(win) = self.window.as_ref() {
             let cursor = pos.pane.get_cursor_position();
             let top = pos.pane.get_dimensions().physical_top;
-            let tab_bar_height = if self.show_tab_bar && !self.config.tab_bar_at_bottom {
+            let tab_bar_height = if self.show_tab_bar {
                 self.tab_bar_pixel_height().unwrap()
             } else {
                 0.0

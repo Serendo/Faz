@@ -10,39 +10,27 @@ use window::color::LinearRgba;
 
 impl crate::TermWindow {
     pub fn paint_tab_bar(&mut self, layers: &mut TripleLayerQuadAllocator) -> anyhow::Result<()> {
-        let border = self.get_os_border();
         let tab_bar_height = self.tab_bar_pixel_height()?;
         // The bar keeps its one line of cells; the strip above it stays empty
         // and draggable. Its bottom edge lands on the strip line derived from
         // the window buttons, and the terminal content starts there too.
-        let tab_bar_y = if self.config.tab_bar_at_bottom {
-            ((self.dimensions.pixel_height as f32) - tab_bar_height - border.bottom.get() as f32)
-                .max(0.)
+        // The bar hangs from the strip line: its top is strip minus its own
+        // height, so its bottom edge is the line itself. Fullscreen has no
+        // buttons and no strip, so the bar sits at the very top.
+        let tab_bar_y = if self.layout_is_effective_fullscreen() {
+            0.
         } else {
-            // The bar hangs from the strip line: its top is strip minus its
-            // own height, so its bottom edge is the line itself. Fullscreen has
-            // no buttons and no strip, so the bar sits at the very top.
-            if self.layout_is_effective_fullscreen() {
-                0.
-            } else {
-                let strip = self.title_bar_strip_height();
-                (strip - tab_bar_height).max(0.)
-            }
+            let strip = self.title_bar_strip_height();
+            (strip - tab_bar_height).max(0.)
         };
         let panes = self.get_panes_to_render();
         let force_opaque_tab_bar_background = forces_opaque_faz_tui_window_background(&panes);
 
         let palette = self.palette().clone();
 
-        let tab_metrics = if self.config.tab_bar_at_bottom {
-            // Bottom tabs have no rounded titlebar mask above them, so keep the
-            // compact natural height used by earlier releases.
-            RenderMetrics::with_font_metrics(&self.fonts.default_font()?.metrics())
-        } else {
-            // Top tabs sit under the macOS titlebar mask; honor line_height so
-            // tall fonts don't clip against the top edge.
-            self.render_metrics
-        };
+        // Top tabs sit under the macOS titlebar mask; honor line_height so tall
+        // fonts don't clip against the top edge.
+        let tab_metrics = self.render_metrics;
 
         // The strip the tab bar leaves above itself — the space the standard
         // window buttons sit in — is window chrome, not terminal content. Mark
@@ -160,11 +148,7 @@ impl crate::TermWindow {
                     .to_linear()
             });
         let bg = pane_background.mul_alpha(self.config.window_background_opacity);
-        let top = if self.config.tab_bar_at_bottom {
-            tab_bar_y
-        } else {
-            0.0
-        };
+        let top = 0.0;
         self.filled_rectangle(
             layers,
             0,
@@ -185,11 +169,8 @@ impl crate::TermWindow {
         render_metrics: &RenderMetrics,
     ) -> anyhow::Result<f32> {
         let _ = fontconfig;
-        if config.tab_bar_at_bottom {
-            Ok(render_metrics.natural_cell_height as f32)
-        } else {
-            Ok(render_metrics.cell_size.height as f32)
-        }
+        let _ = config;
+        Ok(render_metrics.cell_size.height as f32)
     }
 
     /// Cheap approximation of tab bar height that avoids the ~485ms cost of
@@ -201,11 +182,8 @@ impl crate::TermWindow {
         config: &ConfigHandle,
         render_metrics: &RenderMetrics,
     ) -> f32 {
-        if config.tab_bar_at_bottom {
-            render_metrics.natural_cell_height as f32
-        } else {
-            render_metrics.cell_size.height as f32
-        }
+        let _ = config;
+        render_metrics.cell_size.height as f32
     }
 
     pub fn tab_bar_pixel_height(&self) -> anyhow::Result<f32> {
@@ -218,9 +196,6 @@ impl crate::TermWindow {
     /// The strip that holds the window buttons is chrome: the tab bar's one
     /// line sits at its bottom, and the content starts right below it.
     pub(crate) fn top_chrome_height(&self) -> f32 {
-        if self.config.tab_bar_at_bottom {
-            return 0.;
-        }
         // Fullscreen has no titlebar and no window buttons, so there is no
         // strip to clear — but a visible tab bar still needs its own height,
         // otherwise the terminal rows run under it.

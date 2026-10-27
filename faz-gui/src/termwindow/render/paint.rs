@@ -371,12 +371,12 @@ impl crate::TermWindow {
                     // would stack two semi-transparent quads, making the top
                     // strip read as a darker, near-opaque band under
                     // window_background_opacity < 1, so skip it in that case.
-                    let top_fill_height = if self.show_tab_bar && !self.config.tab_bar_at_bottom {
+                    let top_fill_height = if self.show_tab_bar {
                         0.0
                     } else if super::borders::integrated_buttons_top_inset(
                         &self.config,
                         self.layout_is_effective_fullscreen(),
-                        self.show_tab_bar && !self.config.tab_bar_at_bottom,
+                        self.show_tab_bar,
                         self.dimensions.dpi as f32,
                     ) > 0
                     {
@@ -388,11 +388,7 @@ impl crate::TermWindow {
                     // The tab bar paints its own transparent background.
                     // When tab bar is at bottom, it covers the bottom border area,
                     // so only fill the padding area.
-                    let bottom_fill_height = if self.show_tab_bar && self.config.tab_bar_at_bottom {
-                        padding_bottom
-                    } else {
-                        padding_bottom + border.bottom.get() as f32
-                    };
+                    let bottom_fill_height = padding_bottom + border.bottom.get() as f32;
                     let right_fill_width = self.effective_right_padding(&self.config) as f32
                         + border.right.get() as f32;
                     // Use content_left_inset() to include content-alignment gap;
@@ -436,29 +432,19 @@ impl crate::TermWindow {
                     // The tab bar paints its own full-width background, so the
                     // left/right side strips must skip the tab bar region to avoid
                     // double-painting.
-                    let tab_bar_top_height = if self.show_tab_bar && !self.config.tab_bar_at_bottom
-                    {
+                    let tab_bar_top_height = if self.show_tab_bar {
                         tab_bar_height
                     } else {
                         0.0
                     };
-                    let tab_bar_bottom_height =
-                        if self.show_tab_bar && self.config.tab_bar_at_bottom {
-                            tab_bar_height
-                        } else {
-                            0.0
-                        };
+                    let tab_bar_bottom_height = 0.0;
                     let side_fill_y = (top_fill_height + tab_bar_top_height).min(window_height);
                     // When tab bar is at bottom, side fills should extend to tab bar top,
                     // not to (bottom_fill_height + tab_bar_height) which would leave a gap.
-                    let side_fill_height = if self.show_tab_bar && self.config.tab_bar_at_bottom {
-                        (window_height - side_fill_y - tab_bar_height).max(0.0)
-                    } else {
-                        (window_height
-                            - side_fill_y
-                            - (bottom_fill_height + tab_bar_bottom_height).min(window_height))
-                        .max(0.0)
-                    };
+                    let side_fill_height = (window_height
+                        - side_fill_y
+                        - (bottom_fill_height + tab_bar_bottom_height).min(window_height))
+                    .max(0.0);
 
                     if right_fill_width > 0.0 {
                         let clamped_width = right_fill_width.min(window_width);
@@ -560,11 +546,7 @@ impl crate::TermWindow {
                 let cell_height = self.render_metrics.cell_size.height as f32;
                 let (_, padding_top) = self.padding_left_top();
                 let border = self.get_os_border();
-                let top_bar_height = if self.config.tab_bar_at_bottom {
-                    0.0
-                } else {
-                    self.top_chrome_height()
-                };
+                let top_bar_height = self.top_chrome_height();
                 let top_pixel_y = top_bar_height + padding_top + border.top.get() as f32;
 
                 let x = self.content_left_inset() + ((pos.left + pos.width) as f32 * cell_width);
@@ -592,7 +574,7 @@ impl crate::TermWindow {
 
         // Draw dot indicator for panes that currently receive input.
         for (dot_x, dot_y, is_top_pane) in input_target_top_right {
-            let top_pane_margin = if self.show_tab_bar && !self.config.tab_bar_at_bottom {
+            let top_pane_margin = if self.show_tab_bar {
                 TOP_PANE_MARGIN_WITH_TAB_BAR
             } else {
                 TOP_PANE_MARGIN_NO_TAB_BAR

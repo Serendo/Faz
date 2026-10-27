@@ -212,7 +212,6 @@ directory by default. You can change the position, shorten path titles, or opt
 into showing the foreground command alongside the path:
 
 ```lua
-config.tab_bar_at_bottom = false                   -- move to top
 config.tab_title_show_basename_only = true         -- show "dirname" instead of "parent/dirname"
 config.tab_title_show_foreground_process = true    -- show "dirname·codex" while commands run
 ```

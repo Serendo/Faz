@@ -335,15 +335,6 @@ impl App {
             },
             ConfigField {
                 section: "Window",
-                key: "Tab Bar Position",
-                lua_key: "tab_bar_at_bottom",
-                value: String::new(),
-                default: "Bottom".into(),
-                options: vec!["Bottom", "Top"],
-                skip_write: false,
-            },
-            ConfigField {
-                section: "Window",
                 key: "Short Tab Titles",
                 lua_key: "tab_title_show_basename_only",
                 value: String::new(),
@@ -881,15 +872,6 @@ impl App {
                     _ => None,
                 }
             }
-            "tab_bar_at_bottom" => {
-                if raw == "true" {
-                    Some("Bottom".into())
-                } else if raw == "false" {
-                    Some("Top".into())
-                } else {
-                    None
-                }
-            }
             "smart_tab_mode" => {
                 let value = raw.trim().trim_matches('\'').trim_matches('"');
                 match value {
@@ -1380,18 +1362,6 @@ impl App {
                     _ => "'SmartPrompt'".into(),
                 }
             }
-            "tab_bar_at_bottom" => {
-                let effective = if field.value.is_empty() {
-                    &field.default
-                } else {
-                    &field.value
-                };
-                if effective == "Bottom" {
-                    "true".into()
-                } else {
-                    "false".into()
-                }
-            }
             "smart_tab_mode" => {
                 let effective = if field.value.is_empty() {
                     &field.default
@@ -1479,31 +1449,6 @@ mod tests {
 
     fn test_app() -> App {
         App::new(PathBuf::from("/tmp/faz-config-tui-test.lua"))
-    }
-
-    #[test]
-    fn tab_bar_at_bottom_uses_default_when_value_is_empty() {
-        let app = test_app();
-        let field = app
-            .fields
-            .iter()
-            .find(|f| f.lua_key == "tab_bar_at_bottom")
-            .expect("tab_bar_at_bottom field to exist");
-
-        assert_eq!(app.to_lua_value(field), "true");
-    }
-
-    #[test]
-    fn tab_bar_at_bottom_respects_explicit_top_selection() {
-        let mut app = test_app();
-        let idx = app
-            .fields
-            .iter()
-            .position(|f| f.lua_key == "tab_bar_at_bottom")
-            .expect("tab_bar_at_bottom field to exist");
-        app.fields[idx].value = "Top".to_string();
-
-        assert_eq!(app.to_lua_value(&app.fields[idx]), "false");
     }
 
     #[test]

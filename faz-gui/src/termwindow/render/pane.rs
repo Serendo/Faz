@@ -183,15 +183,11 @@ impl crate::TermWindow {
         let (_, padding_top) = self.padding_left_top();
         let content_left = self.content_left_inset();
 
-        let top_bar_height = if self.config.tab_bar_at_bottom {
-            0.0
-        } else {
-            self.top_chrome_height()
-        };
+        let top_bar_height = self.top_chrome_height();
         let border = self.get_os_border();
         // When tab bar is at top, it covers the titlebar area, so don't add
         // border.top which includes the integrated buttons inset.
-        let effective_border_top = if self.show_tab_bar && !self.config.tab_bar_at_bottom {
+        let effective_border_top = if self.show_tab_bar {
             0.0
         } else {
             border.top.get() as f32
@@ -288,12 +284,7 @@ impl crate::TermWindow {
                 // When tab bar is at bottom, it covers the bottom border area, so
                 // don't subtract border.bottom which would create a gap.
                 let padding_bottom = effective_padding_bottom;
-                let effective_border_bottom = if self.show_tab_bar && self.config.tab_bar_at_bottom
-                {
-                    0.0
-                } else {
-                    border.bottom.get() as f32
-                };
+                let effective_border_bottom = border.bottom.get() as f32;
                 self.dimensions.pixel_height as f32 - y - padding_bottom - effective_border_bottom
             } else {
                 (pos.height as f32 * cell_height) + height_delta as f32
@@ -767,11 +758,7 @@ impl crate::TermWindow {
         } else {
             0.
         };
-        let (top_bar_height, bottom_bar_height) = if self.config.tab_bar_at_bottom {
-            (0.0, tab_bar_height)
-        } else {
-            (tab_bar_height, 0.0)
-        };
+        let (top_bar_height, bottom_bar_height) = (tab_bar_height, 0.0);
         let (_, effective_padding_bottom) = self.effective_vertical_padding();
         let effective_padding_bottom = effective_padding_bottom as f32;
 
