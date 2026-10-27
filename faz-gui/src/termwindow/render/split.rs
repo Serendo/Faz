@@ -21,12 +21,22 @@ impl crate::TermWindow {
             .to_linear()
             .mul_alpha(self.config.window_background_opacity);
 
+        // Must use the same origin as `paint_pane`, which draws the pane
+        // backgrounds this line sits between. `paint_pane` treats the tab bar
+        // as covering the top border, so it does not add `border.top` when the
+        // bar is visible; adding it here put the line a border's worth of
+        // pixels above the boundary the two panes actually meet at.
         let border = self.get_os_border();
+        let effective_border_top = if self.show_tab_bar {
+            0.
+        } else {
+            border.top.get() as f32
+        };
         let first_row_offset = if self.show_tab_bar {
-            self.tab_bar_pixel_height()?
+            self.top_chrome_height()
         } else {
             0.
-        } + border.top.get() as f32;
+        } + effective_border_top;
 
         let (_, padding_top) = self.padding_left_top();
         let content_left = self.content_left_inset();
